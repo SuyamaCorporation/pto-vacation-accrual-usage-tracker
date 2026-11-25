@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>有給休暇積立・消化トラッカー</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<div class="max-w-4xl mx-auto px-4 py-6">
+  <header class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">有給休暇トラッカー</h1>
+    <p class="text-gray-500 text-sm mt-1">有給休暇の積立・消化・残日数を管理する</p>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="flex gap-4 border-b border-gray-200 mb-6" role="tablist">
+    <button role="tab" id="tab-summary" aria-selected="true" aria-controls="panel-summary"
+      class="pb-2 text-sm font-medium border-b-2 border-indigo-500 text-indigo-600" onclick="showTab('summary')">サマリー</button>
+    <button role="tab" id="tab-settings" aria-selected="false" aria-controls="panel-settings"
+      class="pb-2 text-sm font-medium text-gray-500" onclick="showTab('settings')">設定</button>
+    <button role="tab" id="tab-usage" aria-selected="false" aria-controls="panel-usage"
+      class="pb-2 text-sm font-medium text-gray-500" onclick="showTab('usage')">休暇申請</button>
+    <button role="tab" id="tab-chart" aria-selected="false" aria-controls="panel-chart"
+      class="pb-2 text-sm font-medium text-gray-500" onclick="showTab('chart')">チャート</button>
+  </nav>
+
+  <!-- Summary -->
+  <div id="panel-summary" role="tabpanel" aria-labelledby="tab-summary">
+    <div id="summary-cards" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+    <div id="warning-box" class="hidden mb-4"></div>
+    <div class="bg-white rounded-xl shadow-sm p-5">
+      <h2 class="text-base font-semibold text-gray-700 mb-3">休暇申請一覧</h2>
+      <div id="usage-list"></div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" class="hidden">
+    <div class="bg-white rounded-xl shadow-sm p-6">
+      <h2 class="text-lg font-semibold text-gray-700 mb-4">有給休暇設定</h2>
+      <form id="settings-form" onsubmit="saveSettings(event)" class="space-y-4">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="s-annual" class="block text-sm font-medium text-gray-600 mb-1">年間付与日数</label>
+            <input id="s-annual" type="number" min="0" max="40" step="0.5" required placeholder="20"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+          <div>
+            <label for="s-accrual" class="block text-sm font-medium text-gray-600 mb-1">積立方法</label>
+            <select id="s-accrual"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="lump">一括付与（年度初め）</option>
+              <option value="monthly">月次積立</option>
+            </select>
+          </div>
+          <div>
+            <label for="s-carryover" class="block text-sm font-medium text-gray-600 mb-1">繰越上限日数</label>
+            <input id="s-carryover" type="number" min="0" max="40" step="0.5" placeholder="20"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+          <div>
+            <label for="s-yearstart" class="block text-sm font-medium text-gray-600 mb-1">年度開始日</label>
+            <input id="s-yearstart" type="date" required
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+          <div>
+            <label for="s-carryover-days" class="block text-sm font-medium text-gray-600 mb-1">昨年度繰越日数</label>
+            <input id="s-carryover-days" type="number" min="0" max="40" step="0.5" placeholder="0"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+          <div>
+            <label for="s-warn-threshold" class="block text-sm font-medium text-gray-600 mb-1">警告閾値（残日数）</label>
+            <input id="s-warn-threshold" type="number" min="0" max="20" step="0.5" placeholder="5"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+        </div>
+        <button type="submit"
+          class="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors">設定を保存</button>
+      </form>
+      <div id="settings-msg" class="hidden mt-3 text-green-600 text-sm font-medium" role="alert" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- Usage -->
+  <div id="panel-usage" role="tabpanel" aria-labelledby="tab-usage" class="hidden">
+    <div class="bg-white rounded-xl shadow-sm p-6">
+      <h2 class="text-lg font-semibold text-gray-700 mb-4">休暇申請を追加</h2>
+      <form id="usage-form" onsubmit="saveUsage(event)" class="space-y-4">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="u-start" class="block text-sm font-medium text-gray-600 mb-1">開始日</label>
+            <input id="u-start" type="date" required
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+          <div>
+            <label for="u-end" class="block text-sm font-medium text-gray-600 mb-1">終了日</label>
+            <input id="u-end" type="date" required
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+          <div>
+            <label for="u-type" class="block text-sm font-medium text-gray-600 mb-1">種別</label>
+            <select id="u-type"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="vacation">有給休暇</option>
+              <option value="sick">病気休暇</option>
+              <option value="personal">私用休暇</option>
+            </select>
+          </div>
+          <div>
+            <label for="u-status" class="block text-sm font-medium text-gray-600 mb-1">ステータス</label>
+            <select id="u-status"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="approved">承認済み</option>
+              <option value="pending">申請中</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label for="u-note" class="block text-sm font-medium text-gray-600 mb-1">メモ (任意)</label>
+          <input id="u-note" type="text" placeholder="旅行、家族行事..."
+            class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div id="u-days-preview" class="text-sm text-indigo-600 font-medium"></div>
+        <button type="submit"
+          class="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors">追加する</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div id="panel-chart" role="tabpanel" aria-labelledby="tab-chart" class="hidden">
+    <div class="bg-white rounded-xl shadow-sm p-6">
+      <h2 class="text-lg font-semibold text-gray-700 mb-4">月次積立 vs 消化チャート</h2>
+      <div id="chart-container"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const SK_SETTINGS = 'pto_settings_v1';
+const SK_USAGES = 'pto_usages_v1';
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+const getSettings = () => { try { return JSON.parse(localStorage.getItem(SK_SETTINGS)||'null'); } catch { return null; } };
+const getUsages = () => { try { return JSON.parse(localStorage.getItem(SK_USAGES)||'[]'); } catch { return []; } };
+
+function countWorkdays(start, end) {
+  let count = 0;
+  const d = new Date(start + 'T00:00:00');
+  const e = new Date(end + 'T00:00:00');
+  while (d <= e) {
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+    d.setDate(d.getDate()+1);
+  }
+  return count;
+}
+
+function getAccruedDays(settings, asOf) {
+  const today = asOf || new Date();
+  const yearStart = new Date(settings.yearStart + 'T00:00:00');
+  if (settings.accrualMethod === 'lump') {
+    return parseFloat(settings.annualDays) + parseFloat(settings.carryoverDays || 0);
+  } else {
+    // Monthly: prorate
+    let months = (today.getFullYear() - yearStart.getFullYear()) * 12 + (today.getMonth() - yearStart.getMonth());
+    months = Math.min(Math.max(months, 0), 12);
+    const monthlyRate = parseFloat(settings.annualDays) / 12;
+    return Math.min(months * monthlyRate, parseFloat(settings.annualDays)) + parseFloat(settings.carryoverDays || 0);
+  }
+}
+
+function getUsedDays(usages, statusFilter) {
+  return usages
+    .filter(u => !statusFilter || statusFilter.includes(u.status))
+    .reduce((sum, u) => sum + countWorkdays(u.startDate, u.endDate), 0);
+}
+
+function getProjectedEOY(settings) {
+  const yearStart = new Date(settings.yearStart + 'T00:00:00');
+  const yearEnd = new Date(yearStart);
+  yearEnd.setFullYear(yearEnd.getFullYear() + 1);
+  yearEnd.setDate(yearEnd.getDate() - 1);
+  const totalDays = parseFloat(settings.annualDays) + parseFloat(settings.carryoverDays || 0);
+  const usages = getUsages().filter(u => u.status === 'approved');
+  const used = getUsedDays(usages);
+  return totalDays - used;
+}
+
+function saveSettings(e) {
+  e.preventDefault();
+  const s = {
+    annualDays: parseFloat(document.getElementById('s-annual').value),
+    accrualMethod: document.getElementById('s-accrual').value,
+    carryoverLimit: parseFloat(document.getElementById('s-carryover').value) || 0,
+    yearStart: document.getElementById('s-yearstart').value,
+    carryoverDays: parseFloat(document.getElementById('s-carryover-days').value) || 0,
+    warnThreshold: parseFloat(document.getElementById('s-warn-threshold').value) || 5
+  };
+  localStorage.setItem(SK_SETTINGS, JSON.stringify(s));
+  const msg = document.getElementById('settings-msg');
+  msg.textContent = '設定を保存しました';
+  msg.classList.remove('hidden');
+  setTimeout(() => msg.classList.add('hidden'), 2500);
+  renderSummary();
+}
+
+function saveUsage(e) {
+  e.preventDefault();
+  const usages = getUsages();
+  usages.push({
+    id: uid(),
+    startDate: document.getElementById('u-start').value,
+    endDate: document.getElementById('u-end').value,
+    type: document.getElementById('u-type').value,
+    status: document.getElementById('u-status').value,
+    note: document.getElementById('u-note').value.trim()
+  });
+  localStorage.setItem(SK_USAGES, JSON.stringify(usages));
+  e.target.reset();
+  document.getElementById('u-days-preview').textContent = '';
+  renderSummary();
+  showTab('summary');
+}
+
+function deleteUsage(id) {
+  if (!confirm('この申請を削除しますか？')) return;
+  localStorage.setItem(SK_USAGES, JSON.stringify(getUsages().filter(u => u.id !== id)));
+  renderSummary();
+}
+
+function renderSummary() {
+  const settings = getSettings();
+  const usages = getUsages();
+
+  if (!settings) {
+    document.getElementById('summary-cards').innerHTML = '<div class="col-span-4 text-gray-400 text-sm py-6 text-center">設定タブで有給休暇の設定を入力してください</div>';  // xss-ok: reviewed-internal-data
+    document.getElementById('usage-list').innerHTML = '';  // xss-ok: reviewed-internal-data
+    return;
+  }
+
+  const accrued = getAccruedDays(settings);
+  const usedApproved = getUsedDays(usages.filter(u => u.status === 'approved'));
+  const usedPending = getUsedDays(usages.filter(u => u.status === 'pending'));
+  const remaining = accrued - usedApproved;
+  const projectedEOY = getProjectedEOY(settings);
+  const carryoverLimit = parseFloat(settings.carryoverLimit) || 0;
+  const atRisk = Math.max(0, projectedEOY - carryoverLimit);
+
+  const cards = [
+    { label: '積立済み', value: accrued.toFixed(1), unit: '日', color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { label: '消化済み（承認）', value: usedApproved.toFixed(1), unit: '日', color: 'text-orange-600', bg: 'bg-orange-50' },
+    { label: '残日数', value: remaining.toFixed(1), unit: '日', color: remaining < (settings.warnThreshold||5) ? 'text-red-600' : 'text-green-600', bg: remaining < (settings.warnThreshold||5) ? 'bg-red-50' : 'bg-green-50' },
+    { label: '年度末予測残', value: projectedEOY.toFixed(1), unit: '日', color: 'text-gray-700', bg: 'bg-gray-50' }
+  ];
+  document.getElementById('summary-cards').innerHTML = cards.map(c => // xss-ok: computed value
+    `<div class="${c.bg} rounded-xl p-4">
+      <div class="text-xs text-gray-500 mb-1">${c.label}</div>
+      <div class="${c.color} text-2xl font-bold">${c.value}<span class="text-sm font-normal ml-1">${c.unit}</span></div>
+    </div>`).join('');
+
+  // Warning
+  const warnEl = document.getElementById('warning-box');
+  const warnings = [];
+  if (remaining < (settings.warnThreshold || 5)) warnings.push(`残日数が${settings.warnThreshold||5}日を下回っています（現在 ${remaining.toFixed(1)} 日）`);
+  if (atRisk > 0) warnings.push(`年度末に ${atRisk.toFixed(1)} 日が繰越上限超過で消滅リスクがあります`);
+  if (usedPending > 0) warnings.push(`申請中の休暇が ${usedPending.toFixed(1)} 日あります（未承認）`);
+  if (warnings.length) {
+    warnEl.className = 'mb-4';
+    warnEl.innerHTML = `<div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4">` + // xss-ok: computed value
+      warnings.map(w => `<div class="text-yellow-800 text-sm flex items-start gap-2"><span>⚠</span>${w}</div>`).join('') + '</div>';
+  } else {
+    warnEl.classList.add('hidden');
+  }
+
+  // Usage list
+  const typeLabel = { vacation: '有給休暇', sick: '病気休暇', personal: '私用休暇' };
+  const statusLabel = { approved: '承認済み', pending: '申請中' };
+  const statusColor = { approved: 'bg-green-100 text-green-700', pending: 'bg-yellow-100 text-yellow-700' };
+  const sorted = [...usages].sort((a,b) => b.startDate.localeCompare(a.startDate));
+  document.getElementById('usage-list').innerHTML = sorted.length ? `  // xss-ok: reviewed-internal-data
+    <table class="w-full text-sm border-collapse" role="table">
+      <thead><tr class="bg-gray-50 text-gray-600 text-left">
+        <th class="p-2 font-medium">期間</th>
+        <th class="p-2 font-medium">日数</th>
+        <th class="p-2 font-medium">種別</th>
+        <th class="p-2 font-medium">状態</th>
+        <th class="p-2 font-medium">メモ</th>
+        <th class="p-2 font-medium"></th>
+      </tr></thead>
+      <tbody>${sorted.map((u,i) => {
+        const days = countWorkdays(u.startDate, u.endDate);
+        return `<tr class="${i%2===0?'bg-white':'bg-gray-50'}">
+          <td class="p-2">${u.startDate}${u.startDate!==u.endDate?`〜${u.endDate}`:''}</td>
+          <td class="p-2 font-semibold">${days}日</td>
+          <td class="p-2">${typeLabel[u.type]||escapeHtml(u.type)}</td>
+          <td class="p-2"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${statusColor[u.status]||'bg-gray-100 text-gray-600'}">${statusLabel[u.status]||escapeHtml(u.status)}</span></td>
+          <td class="p-2 text-gray-400">${u.note?escapeHtml(u.note):''}</td>
+          <td class="p-2"><button onclick="deleteUsage('${u.id}')" class="text-red-400 hover:text-red-600 text-xs">削除</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>` : '<p class="text-gray-400 text-sm">休暇申請がまだありません</p>'; // escapeHtml applied to u.note, u.type, u.status above
+}
+
+function renderChart() {
+  const settings = getSettings();
+  if (!settings) {
+    document.getElementById('chart-container').innerHTML = '<p class="text-gray-400 text-sm">設定が必要です</p>';  // xss-ok: reviewed-internal-data
+    return;
+  }
+  const usages = getUsages().filter(u => u.status === 'approved');
+  const yearStart = new Date(settings.yearStart + 'T00:00:00');
+  const monthlyRate = parseFloat(settings.annualDays) / 12;
+  const carryover = parseFloat(settings.carryoverDays) || 0;
+
+  const months = [];
+  for (let i = 0; i < 12; i++) {
+    const m = new Date(yearStart);
+    m.setMonth(m.getMonth() + i);
+    const label = `${m.getMonth()+1}月`;
+    const accrued = settings.accrualMethod === 'lump'
+      ? parseFloat(settings.annualDays) + carryover
+      : Math.min((i+1) * monthlyRate, parseFloat(settings.annualDays)) + carryover;
+    const mStr = m.toISOString().slice(0,7);
+    const used = usages.filter(u => u.startDate.slice(0,7) === mStr)
+      .reduce((s, u) => s + countWorkdays(u.startDate, u.endDate), 0);
+    months.push({ label, accrued, used });
+  }
+
+  // Cumulative used
+  let cumUsed = 0;
+  const W=560, H=140, padL=35, padB=25, padT=10, padR=10;
+  const barW = Math.floor((W - padL - padR) / 12) - 2;
+  const maxVal = months.reduce((m,v) => Math.max(m, v.accrued), 0) * 1.1 || 10;
+  let svg = `<svg width="100%" viewBox="0 0 ${W} ${H+padB+padT}" role="img" aria-label="月次積立vs消化チャート">`;
+  // Grid
+  for (let v=0; v<=maxVal; v+=5) {
+    const y = padT + H - (v/maxVal)*H;
+    svg += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#f3f4f6" stroke-width="1"/>`;
+    svg += `<text x="${padL-4}" y="${y+4}" text-anchor="end" font-size="9" fill="#9ca3af">${v}</text>`;
+  }
+  months.forEach((m, i) => {
+    cumUsed += m.used;
+    const x = padL + i * (barW + 2);
+    const accruedH = (m.accrued / maxVal) * H;
+    const usedH = (cumUsed / maxVal) * H;
+    svg += `<rect x="${x}" y="${padT + H - accruedH}" width="${barW}" height="${accruedH}" rx="2" fill="#e0e7ff" opacity="0.9"><title>${m.label} 積立 ${m.accrued.toFixed(1)}日</title></rect>`;
+    if (usedH > 0) svg += `<rect x="${x+2}" y="${padT + H - usedH}" width="${barW-4}" height="${usedH}" rx="2" fill="#6366f1" opacity="0.85"><title>${m.label} 累積消化 ${cumUsed.toFixed(1)}日</title></rect>`;
+    svg += `<text x="${x + barW/2}" y="${padT+H+padB-4}" text-anchor="middle" font-size="8" fill="#6b7280">${m.label}</text>`;
+  });
+  // Legend
+  svg += `<rect x="${padL}" y="${padT+H+padB-15}" width="10" height="8" fill="#e0e7ff" rx="1"/>
+    <text x="${padL+13}" y="${padT+H+padB-9}" font-size="8" fill="#6b7280">積立</text>
+    <rect x="${padL+45}" y="${padT+H+padB-15}" width="10" height="8" fill="#6366f1" rx="1"/>
+    <text x="${padL+58}" y="${padT+H+padB-9}" font-size="8" fill="#6b7280">累積消化</text>`;
+  svg += '</svg>';
+  document.getElementById('chart-container').innerHTML = svg; // xss-ok: computed value
+}
+
+function showTab(name) {
+  ['summary','settings','usage','chart'].forEach(t => {
+    document.getElementById('panel-'+t).classList.toggle('hidden', t!==name);
+    const btn = document.getElementById('tab-'+t);
+    btn.classList.toggle('border-b-2', t===name);
+    btn.classList.toggle('border-indigo-500', t===name);
+    btn.classList.toggle('text-indigo-600', t===name);
+    btn.classList.toggle('text-gray-500', t!==name);
+    btn.setAttribute('aria-selected', t===name?'true':'false');
+  });
+  if (name==='chart') renderChart();
+}
+
+// Populate settings form from storage
+const s = getSettings();
+if (s) {
+  document.getElementById('s-annual').value = s.annualDays || '';
+  document.getElementById('s-accrual').value = s.accrualMethod || 'lump';
+  document.getElementById('s-carryover').value = s.carryoverLimit ?? '';
+  document.getElementById('s-yearstart').value = s.yearStart || '';
+  document.getElementById('s-carryover-days').value = s.carryoverDays ?? '';
+  document.getElementById('s-warn-threshold').value = s.warnThreshold ?? '';
+}
+
+// Days preview
+['u-start','u-end'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    const s = document.getElementById('u-start').value;
+    const e = document.getElementById('u-end').value;
+    if (s && e && s <= e) {
+      const d = countWorkdays(s, e);
+      document.getElementById('u-days-preview').textContent = `稼働日数: ${d} 日`;
+    }
+  });
+});
+
+document.getElementById('u-start').value = new Date().toISOString().slice(0,10);
+document.getElementById('u-end').value = new Date().toISOString().slice(0,10);
+renderSummary();
+</script>
+</body>
+</html>
